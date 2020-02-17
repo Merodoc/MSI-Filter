@@ -26,46 +26,32 @@ class DefectFilter:
         self.mzlist = []
         self.intensity_list = []
         self.filename = []
-        self.KM2 = []
-        self.KMD2 = []
-        self.filtered_intens = []
-        self.filtered_mass = []
+
         
         for idx, (x,y,z) in enumerate(self.spectrum.coordinates):
             self.mzs, self.intensities = self.spectrum.getspectrum(idx)
             self.mzlist.append(self.mzs)
-            self.intensity_list.append(self.intensities)
-        for i in range(len(self.intensity_list)):
-            self.filterIntens(self.intensity_list[i], self.mzlist[i])
-        
-        self.filtered_mass = np.array(self.filtered_mass)
-        self.filtered_intens = np.array(self.filtered_intens)
+            self.intensity_list.append(self.intensities)     
         
     def MSIFilter(self, coi, alpha):
         "Filter imzML file for complex of interest"
         if coi == "N-Glycan":
             self.glycanFilter()
             self.glycan_intens = []
-            self.glycan_mzlist = self.filtered_mass
-            for i in range(len(self.glycan_mzlist)):
-                print("Iteration: "+str(i))
-                if not np.all(self.glycan_mzlist[i]==0):
-                    self.kendrickMass(self.glycan_mzlist[i])
-                    self.glycan_intens.append(self.glycanProb(self.glycan_mzlist[i], self.KMD, alpha, self.filtered_intens[i]))
-                else:
-                    self.glycan_intens.append(self.glycan_mzlist[i])
-            outname = 'glycanSpec'+str(np.random.randint(0,10**6))+'.imzML'
-            mid = time.time()
-            print("Iteration Time: "+str(mid-start))
+            for i in range(len(self.intensity_list)):
+                if not np.all(self.intensity_list[i] == 0):
+                    self.kendrickMass(self.mzlist[i])
+                    filterIntens = self.glycanProb(self.KM, self.KMD, alpha, self.intensity_list[i])
+                    self.glycan_intens.append(filterIntens)
+            outname = "Filtered_mz_"+str(np.random.randint(100000))
             with ImzMLWriter(outname) as w:
-                    for i in range(len(self.glycan_mzlist)):
-                        w.addSpectrum(self.glycan_mzlist[i], self.glycan_intens[i], self.spectrum.coordinates[i])
+                    for i in range(len(self.mzlist)):
+                        w.addSpectrum(self.mzlist[i], self.glycan_intens[i], self.spectrum.coordinates[i])
             print("File Written to : " + outname)
         
     def glycanFilter(self, max_defect = 3):
         """create a line for the glycan filter based on ASMS 2019 poster """
         self.glycanMD = self.mzs*3.5*10**(-4) + 0.0039
-        plt.plot(self.mzs, self.glycanMD)
         self.glycanDict = {}
         self.glycanSigma = 0.0173
         for i in range(len(self.mzs)):
@@ -78,7 +64,7 @@ class DefectFilter:
         """ for single spectrum """
         glycanFilterInt = intensities.copy()
         for i in range(len(KM)):
-            xbar = self.glycanDict[KM[i]]
+            xbar = self.glycanDict[self.KM[i]]
             bestProb = 1
             for j in KMD[i]:
                 if dist == 'Norm':
@@ -95,9 +81,9 @@ class DefectFilter:
         """ for single spectrum """
         # Start with KMs between 0 and 1:
         self.KMdict = {}
-#        for i in range(max_defect + 1):
-#            if i != 0:
-#                self.KMdict[min(mzs)-i] = []
+        for i in range(max_defect + 1):
+            if i != 0:
+                self.KMdict[min(mzs)-i] = []
                 
         for mz in mzs:
             self.KMdict[mz] = []
@@ -111,7 +97,7 @@ class DefectFilter:
                         self.KMdict[mz-i] = [defect+i]
         tbr = []
         for i in self.KMdict.keys():
-            if i < min(mzs):
+            if i not in self.mzs:
                 tbr.append(i)
         
         for i in tbr:
@@ -133,24 +119,23 @@ class DefectFilter:
         for i in range(len(self.filtered_mass)):
             plt.scatter(self.filtered_mass[i], self.KMD2[i])
         plt.show()
-            
+        
+    """        
     def filterIntens(self, intens_list, mzlist,thresh = 0):
         print("iteration")
-        intens = []
-        mz = []
-        if  np.all(intens_list <= thresh):
-            np.append(self.filtered_intens, intens_list)
-            np.append(self.filtered_mass, mzlist)
-        else:
-            for i in range(len(intens_list)):
-                if intens_list[i] > thresh:
-                    intens.append(intens_list[i])
-                    mz.append(mzlist[i])
-                else:
-                    intens.append(0)
-                    mz.append(0)
-        np.append(self.filtered_intens, intens)
-        np.append(self.filtered_mass, mz)
+        for i in intens_list:
+            j = 0
+            if  np.all(i <= thresh):
+                continue
+            else:
+                for k in i:
+                    if k > thresh:
+                        intens.append(intens_list[i])
+                        mz.append(mzlist[i])
+            intens.append(0)
+            mz.append(0)
+    """
+
     
     def kendrickFilter(self, thresh,intens_list, mzlist):
         """ Takes full spectrum lists not single spectrum """
@@ -180,6 +165,7 @@ start = time.time()
 test.MSIFilter("N-Glycan",0.05)
 end = time.time()
 print(end-start)
+
 
 """
 ### 1. imzML data import
